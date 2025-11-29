@@ -2,15 +2,16 @@ import streamlit as st
 import os
 import sys
 from io import StringIO
+from collections import defaultdict
 
 # Set page config
 st.set_page_config(page_title="Directory Viewer", layout="wide")
 
 st.title("📂 Directory Viewer")
 
-# Function to get all files recursively or just flat
-def get_files():
-    file_list = []
+# Function to get all files recursively organized by folder
+def get_files_by_folder():
+    folder_dict = defaultdict(list)
     for root, dirs, files in os.walk("."):
         # Skip hidden directories like .git
         if ".git" in root or ".venv" in root or "__pycache__" in root:
@@ -22,16 +23,49 @@ def get_files():
             
             # Get relative path
             rel_path = os.path.relpath(os.path.join(root, file), ".")
-            file_list.append(rel_path)
-    return sorted(file_list)
+            
+            # Get folder name (or "Root" for files in root directory)
+            folder = os.path.dirname(rel_path)
+            if not folder:
+                folder = "📁 Root"
+            else:
+                folder = "📁 " + folder
+            
+            folder_dict[folder].append(rel_path)
+    
+    # Sort files within each folder
+    for folder in folder_dict:
+        folder_dict[folder].sort()
+    
+    return dict(sorted(folder_dict.items()))
 
-files = get_files()
+files_by_folder = get_files_by_folder()
 
-if not files:
+# Flatten all files for total count
+all_files = []
+for files in files_by_folder.values():
+    all_files.extend(files)
+
+if not all_files:
     st.warning("No files found in the directory.")
 else:
-    # Sidebar for file selection
-    selected_file = st.sidebar.radio("Select a File", files)
+    # Sidebar with folder navigation
+    st.sidebar.title("📁 Folder Navigation")
+    
+    selected_file = None
+    
+    for folder, files in files_by_folder.items():
+        with st.sidebar.expander(f"{folder} ({len(files)} files)", expanded=False):
+            for file in files:
+                file_name = os.path.basename(file)
+                if st.button(f"📄 {file_name}", key=file, use_container_width=True):
+                    st.session_state.selected_file = file
+    
+    # Get selected file from session state
+    if "selected_file" not in st.session_state:
+        st.session_state.selected_file = all_files[0] if all_files else None
+    
+    selected_file = st.session_state.selected_file
 
     if selected_file:
         st.header(f"📄 {selected_file}")
